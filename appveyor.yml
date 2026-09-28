@@ -1,5 +1,5 @@
 image:
-  - Visual Studio 2017
+  - Visual Studio 2022
   - Ubuntu
 
 environment:
@@ -17,7 +17,7 @@ build: off
 
 install:
   # windows only because of APPVEYOR_YML_DISABLE_PS_LINUX https://www.appveyor.com/docs/getting-started-with-appveyor-for-linux/
-  - ps: cinst pester --no-progress
+  - ps: Install-Module Pester -RequiredVersion 6.0.0 -Force -SkipPublisherCheck
   # linux only
   - sh: git clone https://github.com/bats-core/bats-core.git
   - sh: pushd bats-core
@@ -29,10 +29,25 @@ test_script:
   # windows only because of APPVEYOR_YML_DISABLE_PS_LINUX https://www.appveyor.com/docs/getting-started-with-appveyor-for-linux/
   - ps: |
       $testResultsFile = ".\TestsResults.xml"
-      $res = Invoke-Pester -Path .\tests -OutputFormat NUnitXml -OutputFile $testResultsFile -PassThru
+
+      $config = New-PesterConfiguration
+      $config.Run.Path = ".\tests"
+      $config.Run.PassThru = $true
+      
+      $config.TestResult.Enabled = $true
+      $config.TestResult.OutputFormat = "NUnitXml"
+      $config.TestResult.OutputPath = $testResultsFile
+      
+      $res = Invoke-Pester -Configuration $config
+      
       $resultsUploadUrl = "https://ci.appveyor.com/api/testresults/nunit/$($env:APPVEYOR_JOB_ID)"
-      (New-Object 'System.Net.WebClient').UploadFile($resultsUploadUrl, (Resolve-Path $testResultsFile))
-      if ($res.FailedCount -gt 0) { 
+      
+      (New-Object 'System.Net.WebClient').UploadFile(
+          $resultsUploadUrl,
+          (Resolve-Path $testResultsFile)
+      )
+      
+      if ($res.FailedCount -gt 0) {
           throw "$($res.FailedCount) tests failed."
       }
   # checks if code from documentation ok
