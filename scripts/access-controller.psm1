@@ -11,19 +11,20 @@
 
 	Function New-ClientAuthCert {
 		Param (
-		[string]$Username = $env:USERNAME,
-		[string]$SubjectName = "CN=$Username",
-		[datetime]$NotBefore = [DateTime]::Now.AddDays(-1),
-		[datetime]$NotAfter = $NotBefore.AddDays(365*10),
-		[string]$AlgorithmName = "RSA",
-		[int]$KeyLength = 2048,
-		[string] $ProviderName = "Microsoft Enhanced Cryptographic Provider v1.0",
-		[Security.Cryptography.X509Certificates.X509ExtensionCollection]$CustomExtension,
-		[ValidateSet('MD5','SHA1','SHA256','SHA384','SHA512')]
-		[string]$SignatureAlgorithm = "SHA256",
-		[string]$Path = "$env:HOMEDRIVE$env:HOMEPATH\$Username"
+			[string]$Username = $env:USERNAME,
+			[string]$SubjectName = "CN=$Username",
+			[datetime]$NotBefore = [DateTime]::Now.AddDays(-1),
+			[datetime]$NotAfter = $NotBefore.AddDays(365*10),
+			[ValidateSet('RSA')]
+			[string]$AlgorithmName = "RSA",
+			[int]$KeyLength = 2048,
+			[string] $ProviderName = "Microsoft Enhanced Cryptographic Provider v1.0",
+			[Security.Cryptography.X509Certificates.X509ExtensionCollection]$CustomExtension,
+			[ValidateSet('MD5','SHA1','SHA256','SHA384','SHA512')]
+			[string]$SignatureAlgorithm = "SHA256",
+			[string]$Path = "$env:HOMEDRIVE$env:HOMEPATH\$Username"
 		)
-		
+
 		# https://blog.keyfactor.com/creating-a-self-signed-ssl-certificate-using-powershell
 		
 		#New-Variable -Name PFXExportEEOnly -Value 0x0 -Option Constant
@@ -33,12 +34,12 @@
 			Base64 = 0x1 # EncodingType.XCN_CRYPT_STRING_BASE64
 			Binary = 0x2 # EncodingType.XCN_CRYPT_STRING_BINARY
 		} -Option Constant
-		
+
 		# https://docs.microsoft.com/en-us/windows/win32/api/certenroll/ne-certenroll-x509privatekeyexportflags
 		New-Variable -Name X509PrivateKeyExportFlags -Value @{
 			Plaintext = 0x2 # X509PrivateKeyExportFlags.XCN_NCRYPT_ALLOW_PLAINTEXT_EXPORT_FLAG
 		} -Option Constant
-		
+
 		# https://docs.microsoft.com/en-us/windows/win32/api/certenroll/ne-certenroll-alternativenametype
 		New-Variable -Name AlternativeNameType -Value @{
 			UPN = 0xb # AlternativeNameType.XCN_CERT_ALT_NAME_USER_PRINCIPLE_NAME
@@ -49,26 +50,26 @@
 			Exchange = 0x1 # X509KeySpec.XCN_AT_KEYEXCHANGE
 			Signature = 0x2 # X509KeySpec.XCN_AT_SIGNATURE
 		} -Option Constant
-		
+
 		#region Subject
-		
-		$SubjectDN = New-Object -Com X509Enrollment.CX500DistinguishedName
+
+		$SubjectDN = New-Object -ComObject X509Enrollment.CX500DistinguishedName
 		$SubjectDN.Encode($SubjectName, 0x0)
-		
+
 		#endregion
-		
+
 		#region Private Key
-		
-		$Alg = New-Object -Com X509Enrollment.CObjectId
+
+		$Alg = New-Object -ComObject X509Enrollment.CObjectId
 		$Alg.InitializeFromValue(([Security.Cryptography.Oid]$AlgorithmName).Value)
-		
+
 		[String[]]$KeyUsageOpts = ("DigitalSignature", "KeyEncipherment")
-		$KeyUsage = New-Object -Com X509Enrollment.CX509ExtensionKeyUsage
+		$KeyUsage = New-Object -ComObject X509Enrollment.CX509ExtensionKeyUsage
 		$KeyUsage.InitializeEncode([int][Security.Cryptography.X509Certificates.X509KeyUsageFlags]($KeyUsageOpts))
 		$KeyUsage.Critical = $false
-		
+
 		# https://docs.microsoft.com/en-us/windows/win32/api/certenroll/nn-certenroll-ix509privatekey
-		$PrivateKey = New-Object -Com X509Enrollment.CX509PrivateKey -Property @{
+		$PrivateKey = New-Object -ComObject X509Enrollment.CX509PrivateKey -Property @{
 			# Description = 
 			FriendlyName = "Ansible WinRM PK"
 			ProviderName = $ProviderName
@@ -78,33 +79,32 @@
 			Length = $KeyLength
 			MachineContext = 1
 			ExportPolicy = $X509PrivateKeyExportFlags.Plaintext
-			# KeyUsage = $KeyUsage
 		}
-		
+
 		$PrivateKey.Create()
-		
+
 		# $PrivateKey.Export("BCRYPT_PRIVATE_KEY_BLOB", $XCN_CRYPT_STRING_BASE64)
 		# https://docs.microsoft.com/en-us/windows/win32/api/ncrypt/nf-ncrypt-ncryptexportkey ???
 		$PKData = $PrivateKey.Export("PRIVATEBLOB", $EncodingType.Base64)
-		
+
 		$RSA = New-Object System.Security.Cryptography.RSACryptoServiceProvider
 		$RSA.ImportCspBlob([System.Convert]::FromBase64String($PKData))
-		
+
 		# https://stackoverflow.com/questions/23734792/c-sharp-export-private-public-rsa-key-from-rsacryptoserviceprovider-to-pem-strin
-		
+
 		$assemblies=(
-		"System",
-		"System.IO"
+			"System",
+			"System.IO"
 		)
-		
+
 		$source=@"
 using System;
-		
+
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-		
+
 namespace Boxforming {
 		
 public class RsaCsp2DerConverter {
@@ -171,15 +171,15 @@ public class RsaCsp2DerConverter {
 }
 }
 "@
-		
+
 		Add-Type -ReferencedAssemblies $assemblies -TypeDefinition $source -Language CSharp
-		
+
 		if ($RSA.PublicOnly) {
 			# throw new ArgumentException("CSP does not contain a private key!", nameof(csp));
 		}
-		
+
 		$PKParams = $RSA.ExportParameters($true);
-		
+
 		$List = New-Object System.Collections.Generic.List[byte[]]
 		$List.Add([Byte[]] (,0x00))
 		$List.Add($PKParams.Modulus)
@@ -190,17 +190,19 @@ public class RsaCsp2DerConverter {
 		$List.Add($PKParams.DP)
 		$List.Add($PKParams.DQ)
 		$List.Add($PKParams.InverseQ)
-		
+
 		$PKPEMBytes = [Boxforming.RsaCsp2DerConverter]::SerializeList($List)
-		
+
 		$PKPEMString = [Boxforming.RsaCsp2DerConverter]::PemEncode($PKPEMBytes)
-		
-		[System.IO.File]::WriteAllText("$Path.key.pem", $PKPEMString)
-		
+
+		$KeyPath = "$Path.key.pem"
+ 
+		[System.IO.File]::WriteAllText($KeyPath, $PKPEMString)
+
 		#endregion
-		
+
 		#region Certificate Init
-		
+
 		# https://docs.microsoft.com/en-us/windows/win32/api/certenroll/nn-certenroll-ix509certificaterequestcertificate
 		$Cert = New-Object -Com X509Enrollment.CX509CertificateRequestCertificate
 		if ($PrivateKey.MachineContext) {
@@ -212,22 +214,22 @@ public class RsaCsp2DerConverter {
 		$Cert.Issuer    = $Cert.Subject
 		$Cert.NotBefore = $NotBefore
 		$Cert.NotAfter  = $NotAfter
-		
+
 		$SigOId = New-Object -ComObject X509Enrollment.CObjectId
 		$SigOId.InitializeFromValue(([Security.Cryptography.Oid]$SignatureAlgorithm).Value)
 		$Cert.SignatureInformation.HashAlgorithm = $SigOId
-		
+
 		#endregion
 		
 		#region Enhanced Key Usages (EKU)
-		$ClientAuthOId = New-Object -Com X509Enrollment.CObjectId
+		$ClientAuthOId = New-Object -ComObject X509Enrollment.CObjectId
 		# https://docs.microsoft.com/en-us/windows/win32/api/certenroll/nn-certenroll-ix509extensionenhancedkeyusage
 		$ClientAuthOId.InitializeFromValue("1.3.6.1.5.5.7.3.2")
 		$EKUOIds = new-object -Com X509Enrollment.CObjectIds
 		$EKUOIds.Add($ClientAuthOId)
 		$EKUExt = New-Object -Com X509Enrollment.CX509ExtensionEnhancedKeyUsage
 		$EKUExt.InitializeEncode($EKUOIds)
-		
+
 		$Cert.X509Extensions.Add($EKUExt)
 		
 		#endregion
@@ -236,7 +238,7 @@ public class RsaCsp2DerConverter {
 		$SANExt = New-Object -ComObject X509Enrollment.CX509ExtensionAlternativeNames
 		$Names  = New-Object -ComObject X509Enrollment.CAlternativeNames
 		$Name   = New-Object -ComObject X509Enrollment.CAlternativeName
-		
+
 		# $AuthUPN = "otherName:1.3.6.1.4.1.311.20.2.3;UTF8:kiosk@localhost"
 		$AuthUPN = "$Username@localhost"
 		$Name.InitializeFromString($AlternativeNameType.UPN, $AuthUPN)
@@ -244,15 +246,15 @@ public class RsaCsp2DerConverter {
 		$SANExt.InitializeEncode($Names)
 		
 		$Cert.X509Extensions.Add($SANExt)
-		
+
 		#endregion
-		
+
 		#region Certificate Export
-		
+
 		#foreach ($item in $ExtensionsToAdd) {
 		#	$Cert.X509Extensions.Add((Get-Variable -Name $item -ValueOnly))
 		#}
-		
+
 		$Cert.Encode()
 		
 		# export the public key
@@ -263,21 +265,21 @@ public class RsaCsp2DerConverter {
 		# $PemOutput = $PemOutput[0..$($PemOutput.Count - 2)] 
 		$PemOutput[$PemOutput.Length - 1] = "-----END CERTIFICATE-----" # removed extra newline
 		[System.IO.File]::WriteAllLines("$Path.crt.pem", $PemOutput)
-		
+
 		$Windows10Build = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").ReleaseId
 		if (Get-Command "ssh-keygen.exe" -errorAction SilentlyContinue) {
-			ssh-keygen.exe -f "$Path.key.pem" -y | Out-File -FilePath "$Path.key.pub"
+    		ssh-keygen.exe -f "$Path.key.pem" -y | Out-File -FilePath "$Path.key.pub"
 		} elseif ($Windows10Build -and $Windows10Build -gt 1809) {
 			Add-WindowsCapability -Online -Name OpenSSH.Client
 			ssh-keygen.exe -f "$Path.key.pem" -y | Out-File -FilePath "$Path.key.pub"
 		} else {
 			Write-Host "Cannot generate public key from private. Launch 'ssh-keygen.exe -f $Path.key.pem -y > $Path.key.pub' to do so"
 		}
-		
+
 		return New-Object Security.Cryptography.X509Certificates.X509Certificate2 @(,[System.Convert]::FromBase64String($Cert.RawData()))
-		
+
 		#endregion
-		
+
 	}
 	
 	
