@@ -107,69 +107,106 @@ using System.Linq;
 using System.Text;
 
 namespace Boxforming {
-		
-public class RsaCsp2DerConverter {
-    private const int MaximumLineLength = 64;
-		
-    // Based roughly on: http://stackoverflow.com/a/23739932/1254575
-		
-    public RsaCsp2DerConverter() {
-		
-    }
-		
-    private static byte[] Encode(byte[] inBytes, bool useTypeOctet = true) {
-        int length = inBytes.Length;
-        var bytes = new List<byte>();
-		
-        if (useTypeOctet == true)
-            bytes.Add(0x02); // INTEGER
-		
-        bytes.Add(0x84); // Long format, 4 bytes
-        bytes.AddRange(BitConverter.GetBytes(length).Reverse());
-        bytes.AddRange(inBytes);
-		
-        return bytes.ToArray();
-    }
-		
-    public static String PemEncode(byte[] bytes) {
-        //if (bytes == null)
-        //   throw new ArgumentNullException(nameof(bytes));
-		
-        var base64 = Convert.ToBase64String(bytes);
-		
-        StringBuilder b = new StringBuilder();
-        
-        b.Append("-----BEGIN RSA PRIVATE KEY-----\n");
-		
-        for (int i = 0; i < base64.Length; i += MaximumLineLength) {
-            b.Append(base64.Substring(i, Math.Min(MaximumLineLength, base64.Length - i)));
-            b.Append("\n");
-        }
-		
-        b.Append("-----END RSA PRIVATE KEY-----\n");
-		
-        return b.ToString();
-    }
-		
-    public static byte[] SerializeList(List<byte[]> list) {
-        //if (list == null)
-        //   throw new ArgumentNullException(nameof(list));
-		
-        var keyBytes = list.Select(e => Encode(e)).SelectMany(e => e).ToArray();
-		
-        var binaryWriter = new BinaryWriter(new MemoryStream());
-        binaryWriter.Write((byte) 0x30); // SEQUENCE
-        binaryWriter.Write(Encode(keyBytes, false));
-        binaryWriter.Flush();
-		
-        var result = ((MemoryStream) binaryWriter.BaseStream).ToArray();
-		
-        binaryWriter.BaseStream.Dispose();
-        binaryWriter.Dispose();
-		
-        return result;
-    }
-}
+
+	public class RsaCsp2DerConverter {
+		private const int MaximumLineLength = 64;
+
+		// Based roughly on: http://stackoverflow.com/a/23739932/1254575
+
+		public RsaCsp2DerConverter() {
+
+		}
+
+		private static byte[] EncodeLength(int length) {
+			if (length < 0x80)
+				return new byte[] { (byte) length };
+ 
+			var lenBytes = new List<byte>();
+			while (length > 0) {
+				lenBytes.Insert(0, (byte) (length & 0xFF));
+				length >>= 8;
+			}
+ 
+			var result = new List<byte>();
+			result.Add((byte) (0x80 | lenBytes.Count));
+			result.AddRange(lenBytes);
+ 
+			return result.ToArray();
+		}
+
+		private static byte[] Encode(byte[] inBytes, bool useTypeOctet = true) {
+			var payload = inBytes;
+ 
+			if (useTypeOctet) {
+				int start = 0;
+				while (start < payload.Length - 1 && payload[start] == 0x00)
+					start++;
+ 
+				var trimmed = new byte[payload.Length - start];
+				Array.Copy(payload, start, trimmed, 0, trimmed.Length);
+				payload = trimmed;
+ 
+				if (payload.Length == 0)
+					payload = new byte[] { 0x00 };
+ 
+				if ((payload[0] & 0x80) != 0) {
+					var padded = new byte[payload.Length + 1];
+					padded[0] = 0x00;
+					Array.Copy(payload, 0, padded, 1, payload.Length);
+					payload = padded;
+				}
+			}
+ 
+			var bytes = new List<byte>();
+ 
+			if (useTypeOctet == true)
+				bytes.Add(0x02); // INTEGER
+ 
+			bytes.AddRange(EncodeLength(payload.Length));
+			bytes.AddRange(payload);
+ 
+			return bytes.ToArray();
+		}
+
+		public static String PemEncode(byte[] bytes) {
+			//if (bytes == null)
+			//   throw new ArgumentNullException(nameof(bytes));
+
+			var base64 = Convert.ToBase64String(bytes);
+
+			StringBuilder b = new StringBuilder();
+			
+			b.Append("-----BEGIN RSA PRIVATE KEY-----\n");
+
+			for (int i = 0; i < base64.Length; i += MaximumLineLength) {
+				b.Append(base64.Substring(i, Math.Min(MaximumLineLength, base64.Length - i)));
+				b.Append("\n");
+			}
+
+			b.Append("-----END RSA PRIVATE KEY-----\n");
+
+			return b.ToString();
+		}
+
+		public static byte[] SerializeList(List<byte[]> list) {
+			//if (list == null)
+			//   throw new ArgumentNullException(nameof(list));
+
+			var keyBytes = list.Select(e => Encode(e)).SelectMany(e => e).ToArray();
+
+			var binaryWriter = new BinaryWriter(new MemoryStream());
+			binaryWriter.Write((byte) 0x30); // SEQUENCE
+			binaryWriter.Write(Encode(keyBytes, false));
+			binaryWriter.Flush();
+
+			var result = ((MemoryStream) binaryWriter.BaseStream).ToArray();
+
+			binaryWriter.BaseStream.Dispose();
+			binaryWriter.Dispose();
+
+			return result;
+		}
+	}
 }
 "@
 
