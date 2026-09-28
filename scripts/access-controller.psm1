@@ -239,8 +239,9 @@ public class RsaCsp2DerConverter {
 		$Cert.SignatureInformation.HashAlgorithm = $SigOId
 
 		#endregion
-		
-		#region Enhanced Key Usages (EKU)
+
+		#region Extensions: EKU, KeyUsage, Custom
+
 		$ClientAuthOId = New-Object -ComObject X509Enrollment.CObjectId
 		# https://docs.microsoft.com/en-us/windows/win32/api/certenroll/nn-certenroll-ix509extensionenhancedkeyusage
 		$ClientAuthOId.InitializeFromValue("1.3.6.1.5.5.7.3.2")
@@ -250,10 +251,24 @@ public class RsaCsp2DerConverter {
 		$EKUExt.InitializeEncode($EKUOIds)
 
 		$Cert.X509Extensions.Add($EKUExt)
-		
-		#endregion
-		
-		#region Subject Alternative Name (SAN)
+
+		$Cert.X509Extensions.Add($KeyUsage)
+
+		if ($CustomExtension) {
+    		foreach ($Ext in $CustomExtension) {
+    			$ExtOId = New-Object -ComObject X509Enrollment.CObjectId
+    			$ExtOId.InitializeFromValue($Ext.Oid.Value)
+    			$ComExt = New-Object -ComObject X509Enrollment.CX509Extension
+    			$ComExt.Initialize($ExtOId, $EncodingType.Base64, [Convert]::ToBase64String($Ext.RawData))
+    			$ComExt.Critical = $Ext.Critical
+    			$Cert.X509Extensions.Add($ComExt)
+    		}
+    	}
+
+        #endregion
+
+        #region Subject Alternative Name (SAN)
+
 		$SANExt = New-Object -ComObject X509Enrollment.CX509ExtensionAlternativeNames
 		$Names  = New-Object -ComObject X509Enrollment.CAlternativeNames
 		$Name   = New-Object -ComObject X509Enrollment.CAlternativeName
