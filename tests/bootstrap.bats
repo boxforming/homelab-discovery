@@ -17,7 +17,23 @@ function setup() {
 }
 
 @test "Should be able to parse certificate" {
-	run openssl asn1parse -in $CERT_PATH -strparse $(openssl asn1parse -in $CERT_PATH | grep -A 1 ':X509v3 Subject Alternative Name' | tail -n 1 | cut -d ':' -f 1)
+
+    local SAN_OFFSET
+
+    SAN_OFFSET="$(
+        openssl asn1parse -in "$CERT_PATH" |
+        grep -A 1 ':X509v3 Subject Alternative Name' |
+        tail -n 1 |
+        cut -d ':' -f 1
+    )"
+
+    echo "CERT_PATH=$CERT_PATH" >&2
+    echo "SAN offset=$SAN_OFFSET" >&2
+    
+	run openssl asn1parse -in "$CERT_PATH" -strparse "$SAN_OFFSET"
+
+    echo "OUTPUT=${output}" >&2
+	
 	[ "$status" -eq 0 ]
 	[[ "$output" =~ "Microsoft Universal Principal Name" ]]
 	[[ "$output" =~ "${TEST_USERNAME}@localhost" ]]
@@ -26,13 +42,19 @@ function setup() {
 @test "Should be able to start cert share web server" {
 	STORE_PID=1
 	start_cert_share_server $TEST_USERNAME &
+	echo $! > "$BATS_TEST_TMPDIR/server.pid"
+
+    local is_server_running=false
 
     for i in {1..20}; do
         if curl -fs http://127.0.0.1:8000/cert.pem >/dev/null; then
+            is_server_running=true
             break
         fi
         sleep 0.25
     done
+
+    [ "$is_server_running" = true ]
 	
 	run curl -O http://127.0.0.1:8000/cert.pem
 	[ "$status" -eq 0 ]
@@ -52,10 +74,12 @@ function setup() {
 }
 
 function teardown() {
-	if [ -f ./process.pid ] ; then
-		kill $(cat ./process.pid)
-		rm process.pid
-	fi
+
+    if [ -f "$BATS_TEST_TMPDIR/server.pid" ]; then
+        kill "$(cat "$BATS_TEST_TMPDIR/server.pid")" 2>/dev/null || true
+        rm -f "$BATS_TEST_TMPDIR/server.pid"
+    fi
+    
 	# pkill -P $$
 	#kill -SIGTERM -- "-$SERVER_PID"
 	# kill $(ps -o pid= --ppid $$)
