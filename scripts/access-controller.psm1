@@ -197,6 +197,24 @@ public class RsaCsp2DerConverter {
 		$PKPEMString = [Boxforming.RsaCsp2DerConverter]::PemEncode($PKPEMBytes)
 
 		$KeyPath = "$Path.key.pem"
+
+		[System.IO.File]::Create($KeyPath).Close()
+		$KeyFileCreated = $true
+ 
+		$KeyAcl = Get-Acl -LiteralPath $KeyPath
+		$KeyAcl.SetAccessRuleProtection($true, $false) # stop inheriting, drop inherited rules
+		foreach ($Rule in @($KeyAcl.Access)) {
+		    [void]$KeyAcl.RemoveAccessRule($Rule)
+		}
+		$AllowedSids = @(
+		    [Security.Principal.WindowsIdentity]::GetCurrent().User,
+				(New-Object Security.Principal.SecurityIdentifier('S-1-5-18')),    # SYSTEM
+				(New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')) # Administrators
+		)
+		foreach ($Sid in $AllowedSids) {
+		    $KeyAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($Sid, 'FullControl', 'Allow')))
+		}
+		Set-Acl -LiteralPath $KeyPath -AclObject $KeyAcl
  
 		[System.IO.File]::WriteAllText($KeyPath, $PKPEMString)
 
