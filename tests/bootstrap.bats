@@ -35,7 +35,7 @@ function setup() {
     echo "OUTPUT=${output}" >&2
 	
 	[ "$status" -eq 0 ]
-	[[ "$output" =~ "Microsoft Universal Principal Name" ]]
+	[[ "$output" =~ "Microsoft User Principal Name" ]]
 	[[ "$output" =~ "${TEST_USERNAME}@localhost" ]]
 }
 
@@ -76,6 +76,7 @@ function setup() {
 function teardown() {
 
     if [ -f "$BATS_TEST_TMPDIR/server.pid" ]; then
+        echo "stopping the server..." >&2
         kill "$(cat "$BATS_TEST_TMPDIR/server.pid")" 2>/dev/null || true
         rm -f "$BATS_TEST_TMPDIR/server.pid"
     fi
