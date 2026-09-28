@@ -158,28 +158,21 @@ enable_firewall () {
 }
 
 start_cert_share_server () {
-	CERT_USERNAME=${1:-${USER}}
-	TEMP_DIRNAME=$(mktemp -d /tmp/certshare.XXXXXXXXX)
+    CERT_USERNAME="${1:-${USER}}"
+    TEMP_DIRNAME="$(mktemp -d /tmp/certshare.XXXXXXXXX)"
 
-	cp $HOME/${CERT_USERNAME}.crt.pem $TEMP_DIRNAME/cert.pem
-	cp $HOME/${CERT_USERNAME}.key.pub $TEMP_DIRNAME/key.pub
-	# https://stackoverflow.com/questions/39801718/how-to-run-a-http-server-which-serve-a-specific-path
+    cp "$HOME/${CERT_USERNAME}.crt.pem" "$TEMP_DIRNAME/cert.pem"
+    cp "$HOME/${CERT_USERNAME}.key.pub" "$TEMP_DIRNAME/key.pub"
 
-	python - <<PYWEBSERVER
-import sys;
-import os;
-if "$STORE_PID" == "1":
-  pid = str(os.getpid());
-  pidfile = "./process.pid";
-  file(pidfile, 'w').write(pid);
-os.chdir('$TEMP_DIRNAME')
-if sys.version_info[:2] > (2,7):
-  import http.server as httpd;
-else:
-  import SimpleHTTPServer as httpd;
-httpd.test();
-PYWEBSERVER
+    (
+        cd "$TEMP_DIRNAME" || exit 1
 
+        if [ "$STORE_PID" = "1" ]; then
+            echo $$ > ./process.pid
+        fi
+
+        python3 -m http.server 8000
+    )
 }
 
 # sudo update-alternatives --config editor
