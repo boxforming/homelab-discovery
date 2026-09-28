@@ -17,7 +17,8 @@
 			[datetime]$NotAfter = $NotBefore.AddDays(365*10),
 			[ValidateSet('RSA')]
 			[string]$AlgorithmName = "RSA",
-			[int]$KeyLength = 2048,
+			[ValidateRange(3072,16384)]
+			[int]$KeyLength = 4096,
 			[string] $ProviderName = "Microsoft Enhanced Cryptographic Provider v1.0",
 			[Security.Cryptography.X509Certificates.X509ExtensionCollection]$CustomExtension,
 			[ValidateSet('MD5','SHA1','SHA256','SHA384','SHA512')]
