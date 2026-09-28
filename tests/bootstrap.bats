@@ -26,7 +26,14 @@ function setup() {
 @test "Should be able to start cert share web server" {
 	STORE_PID=1
 	start_cert_share_server $TEST_USERNAME &
-	sleep 2
+
+    for i in {1..20}; do
+        if curl -fs http://127.0.0.1:8000/cert.pem >/dev/null; then
+            break
+        fi
+        sleep 0.25
+    done
+	
 	run curl -O http://127.0.0.1:8000/cert.pem
 	[ "$status" -eq 0 ]
 	run curl -O http://127.0.0.1:8000/key.pub
